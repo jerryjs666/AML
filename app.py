@@ -74,8 +74,8 @@ def main():
             st.code(res.get("final_code", ""), language="python")
             guide = res.get("guide")
             if guide:
-                st.write("### Guide")
-                st.json(guide.__dict__ if hasattr(guide, "__dict__") else guide)
+                st.write("### Teacher-Style Guide")
+                st.markdown(render_guide_markdown(guide))
 
     with tabs[1]:
         st.subheader("War Room")
@@ -92,14 +92,12 @@ def main():
                     st.write("#### Solver code")
                     st.code(t.solver.code, language="python")
                     st.write("Approach:", t.solver.approach)
-                    st.write("#### Critic feedback")
-                    st.json(t.critic.__dict__)
+                    st.write("#### Critic feedback (summary)")
+                    st.markdown(render_critic_summary(t.critic))
+                    with st.expander("Raw Critic JSON"):
+                        st.json(t.critic.__dict__)
                     if t.solver.changed_from_last:
                         st.write("Changed from last:", t.solver.changed_from_last)
-            guide = st.session_state["run_results"].get("guide")
-            if guide:
-                st.write("#### Guider Output")
-                st.json(guide.__dict__ if hasattr(guide, "__dict__") else guide)
 
     with tabs[2]:
         st.subheader("RAG & Analytics")
@@ -128,6 +126,79 @@ def complexity_to_numeric(cls: str) -> int:
         "O(N!)": 8,
     }
     return order.get(cls, 0)
+
+
+def render_guide_markdown(guide: Any) -> str:
+    g = guide.__dict__ if hasattr(guide, "__dict__") else guide
+    title = g.get("guide_title", "Guide")
+    summary = g.get("final_summary", "")
+    steps = g.get("steps", []) or []
+    pitfalls = g.get("pitfalls", []) or []
+    final_complexity = g.get("final_complexity", {}) or {}
+
+    parts = [f"#### {title}", summary or ""]
+    if steps:
+        parts.append("**Iteration Recap**")
+        for step in steps:
+            parts.append(
+                "- Iteration {iteration}: issue/risk — {issue}. Change — {change}. Evidence — {evidence}. Complexity {before} → {after}.".format(
+                    iteration=step.get("iteration", "?"),
+                    issue=step.get("what_failed_or_risk", ""),
+                    change=step.get("what_we_changed", ""),
+                    evidence=step.get("evidence", ""),
+                    before=step.get("complexity_before_after", {}).get("before", "unknown"),
+                    after=step.get("complexity_before_after", {}).get("after", "unknown"),
+                )
+            )
+    if pitfalls:
+        parts.append("**Pitfalls & Reminders**")
+        for p in pitfalls:
+            parts.append(f"- {p}")
+    if final_complexity:
+        parts.append(
+            "**Final Complexity**: time {time}, space {space}".format(
+                time=final_complexity.get("time", "unknown"),
+                space=final_complexity.get("space", "unknown"),
+            )
+        )
+    return "\n\n".join(parts)
+
+
+def render_critic_summary(critic: Any) -> str:
+    c = critic.__dict__ if hasattr(critic, "__dict__") else critic
+    status = "passed" if c.get("passed") else "failed"
+    failure = c.get("failure_type", "?")
+    notes = c.get("notes", "")
+    suggestion = c.get("suggested_fix", "")
+    test_summary = c.get("test_summary", {}) or {}
+    num_tests = test_summary.get("num_tests", 0)
+    num_passed = test_summary.get("num_passed", 0)
+    first_failure = test_summary.get("first_failure")
+
+    human_summary = "The critic {status} the solution (type: {failure}).".format(
+        status="approved" if c.get("passed") else "rejected", failure=failure
+    )
+
+    lines = [human_summary, f"Tests passed: {num_passed}/{num_tests}."]
+    if first_failure:
+        lines.append(
+            "First failing case #{idx}: expected `{exp}` but got `{got}`.".format(
+                idx=first_failure.get("idx"),
+                exp=str(first_failure.get("expected", "")),
+                got=str(first_failure.get("got", "")),
+            )
+        )
+    if notes:
+        lines.append(f"Reasoning: {notes}")
+    if suggestion:
+        lines.append(f"Suggested next change: {suggestion}")
+    lines.append(
+        "Complexity gate: {cls}. Evidence: {evidence}".format(
+            cls=c.get("complexity_class", "unknown"),
+            evidence="; ".join(c.get("complexity_evidence", []) or []),
+        )
+    )
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
