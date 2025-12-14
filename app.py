@@ -94,8 +94,8 @@ def main():
                     st.write("Approach:", t.solver.approach)
                     st.write("#### Critic feedback (summary)")
                     st.markdown(render_critic_summary(t.critic))
-                    with st.expander("Raw Critic JSON"):
-                        st.json(t.critic.__dict__)
+                    st.write("Raw Critic JSON")
+                    st.json(t.critic.__dict__)
                     if t.solver.changed_from_last:
                         st.write("Changed from last:", t.solver.changed_from_last)
 
